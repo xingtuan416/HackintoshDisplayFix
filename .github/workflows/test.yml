@@ -1,0 +1,40 @@
+name: tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: 测试套件 (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # ubuntu：用 mock 验证解析逻辑与交互流程
+        # macos ：sed / xxd / base64 都是真的，验证 BSD 用法；且 bash 是 3.2，验证兼容性
+        os: [ ubuntu-latest, macos-latest ]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 运行测试套件
+        run: sudo bash tests/run_tests.sh
+
+  bash32-compat:
+    name: bash 3.2 兼容性扫描
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 扫描 bash 4+ 专有写法
+        run: |
+          set -e
+          # macOS 自带的是 bash 3.2，以下写法在上面会直接报错
+          pattern='declare -A|mapfile|readarray|\$\{[A-Za-z_]+,,\}|\$\{[A-Za-z_]+\^\^}|\[\[ -v |&>>|\|&'
+          if grep -nE "$pattern" HackintoshDisplayFix.sh; then
+            echo "::error::发现 bash 4+ 专有写法，macOS 自带的 bash 3.2 不支持"
+            exit 1
+          fi
+          echo "未发现 bash 4+ 专有写法"

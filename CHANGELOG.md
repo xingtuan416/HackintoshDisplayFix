@@ -39,8 +39,10 @@
 - 还原脚本改名并移到 `~/.hackintoshdisplayfix-restore.sh`
 - 新增 `--list` / `--help` / `--version` 命令行参数
 - 新增 `check_requirements`：非 macOS 或缺少必要命令时给出明确提示后退出
-- 新增测试套件（57 项断言），用 mock 在非 macOS 环境下验证解析逻辑、交互流程与文件产物
-- 许可证保持 MIT；在 README 中明确致谢 one-key-hidpi（本项目的注入思路与图标资源来源）
+- 新增测试套件（59 项断言），用 mock 在非 macOS 环境下验证解析逻辑、交互流程与文件产物（含 EDID 改造算法的逐字节比对）
+- 新增 GitHub Actions：ubuntu 上跑 mock 测试、macOS 上验证 BSD `sed` 用法与 bash 3.2 兼容性，另加 bash 4+ 专有写法扫描
+- 测试套件加安全防护：检测到真实的 `Overrides` 目录已有内容时拒绝运行，避免误删用户机器上的显示器配置
+- 图标测试资源改为运行时生成，不再往仓库里提交假二进制文件
 
 ### 从 Great-EDID 升级
 

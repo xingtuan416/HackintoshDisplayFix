@@ -2,6 +2,7 @@
 
 > **修复黑苹果显示问题的工具** —— 专治 macOS / 黑苹果外接显示器的紫屏、绿屏、花屏、黑屏、色彩失真与识别异常。
 
+[![tests](https://github.com/xingtuan416/HackintoshDisplayFix/actions/workflows/test.yml/badge.svg)](https://github.com/xingtuan416/HackintoshDisplayFix/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](#系统要求)
 [![Shell](https://img.shields.io/badge/shell-bash%203.2%2B-89e051.svg)](#系统要求)
@@ -61,12 +62,17 @@ macOS 允许通过 `Overrides` 目录覆盖单个显示器的 EDID：
 
 ### 1. 下载
 
+**只想用工具** —— 到 [Releases](https://github.com/xingtuan416/HackintoshDisplayFix/releases) 页面下载
+`HackintoshDisplayFix-v1.0.0.zip`，解压后只有一个脚本和说明文档，没有多余文件。
+
+**想看源码 / 参与开发**：
+
 ```bash
 git clone https://github.com/xingtuan416/HackintoshDisplayFix.git
 cd HackintoshDisplayFix
 ```
 
-或直接在 [Releases](https://github.com/xingtuan416/HackintoshDisplayFix/releases) 页面下载压缩包解压。
+> 注意：GitHub 自动生成的 "Source code (zip)" 会包含 `tests/` 目录，那是给开发用的，普通使用不需要。
 
 ### 2. 运行
 
@@ -205,20 +211,31 @@ HackintoshDisplayFix/
 ├── README.md
 ├── LICENSE                       # MIT
 ├── CHANGELOG.md
+├── .github/workflows/test.yml    # CI
 └── tests/
-    ├── run_tests.sh              # 测试套件（57 项断言）
-    ├── gen_fixtures.py           # 生成测试用 EDID 数据
-    └── fixtures/                 # 测试固件
+    ├── run_tests.sh              # 测试套件（59 项断言）
+    ├── gen_fixtures.py           # 重新生成 EDID 测试数据用（日常不需要跑）
+    └── fixtures/                 # EDID 测试向量
 ```
 
 ### 运行测试
 
 ```bash
-bash tests/run_tests.sh
+sudo bash tests/run_tests.sh
 ```
 
 工具本身只能在 macOS 上运行，测试套件用 mock 顶替 `ioreg` / `sudo` / `uname` / `curl` 等 macOS 专有命令，
-在 Linux 上验证**解析逻辑、交互流程、文件产物**是否正确（含 EDID 改造算法的逐字节比对）。
+验证**解析逻辑、交互流程、文件产物**是否正确（含 EDID 改造算法的逐字节比对）。
+
+- **在 Linux 上跑**：`sed` 也会被 mock 掉（GNU sed 不支持 BSD 的 `-i ''` 写法）
+- **在 macOS 上跑**：`sed` / `xxd` / `base64` 都是真的，顺带验证 BSD 用法和 **bash 3.2 兼容性**
+
+> ⚠️ **不要在自己的 Mac 上随手跑测试。** 它会清空 `/Library/Displays/Contents/Resources/Overrides`，
+> 而那正是你真实显示器配置所在的位置。测试套件启动时会先检查该目录，**一旦发现里面有内容就直接拒绝运行**，
+> 但更稳妥的做法还是用 CI 或干净的虚拟机。
+
+CI（[.github/workflows/test.yml](.github/workflows/test.yml)）会在 ubuntu 和 macOS 上各跑一遍，
+并额外扫描 bash 4+ 专有写法 —— macOS 自带的 bash 3.2 不支持那些语法。
 
 ---
 

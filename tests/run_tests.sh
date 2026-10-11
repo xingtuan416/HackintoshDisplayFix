@@ -99,8 +99,16 @@ done
 exec "${args[@]}"
 EOF
 
-    # BSD sed 的 `-i ''` 在 GNU sed 上是错的，这里翻译一下
-    cat > "$MOCK/bin/sed" <<'EOF'
+    # BSD sed 的 `-i ''` 在 GNU sed 上是错的，这里翻译一下。
+    # 在 macOS 上本来就支持 BSD 语法，直接透传 —— 这样 CI 跑 macOS 时
+    # 验证的就是脚本里真实的 `sed -i ''` 用法。
+    if [ "$(uname -s)" = "Darwin" ]; then
+        cat > "$MOCK/bin/sed" <<'EOF'
+#!/bin/bash
+exec /usr/bin/sed "$@"
+EOF
+    else
+        cat > "$MOCK/bin/sed" <<'EOF'
 #!/bin/bash
 args=()
 skip=0
@@ -111,6 +119,7 @@ for a in "$@"; do
 done
 exec /usr/bin/sed "${args[@]}"
 EOF
+    fi
 
     cat > "$MOCK/bin/defaults" <<'EOF'
 #!/bin/bash
@@ -133,7 +142,42 @@ done
 exec $REAL_CHOWN "\${args[@]}"
 EOF
 
-    # curl：把远端 URL 映射到 tests/fixtures/remote 下的本地文件
+    # 图标资源：运行时生成，不往仓库里塞假二进制
+    mkdir -p "$MOCK/remote/displayIcons"
+    cat > "$MOCK/remote/Icons.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>vendors</key>
+	<dict>
+		<key>VID</key>
+		<dict>
+			<key>products</key>
+			<dict>
+				<key>PID</key>
+				<dict>
+					<key>DisplayIcon</key>
+					<string>PICON</string>
+					<key>DisplayIconRect</key>
+					<string>{{RPX, RPY}, {RPW, RPH}}</string>
+					<key>DisplayIsGeneric</key>
+					<true/>
+					<key>DisplayProductName</key>
+					<string>DICON</string>
+				</dict>
+			</dict>
+		</dict>
+	</dict>
+</dict>
+</plist>
+PLIST
+    for icon_name in iMac MacBook MacBookPro ProDisplayXDR; do
+        printf 'icns-mock-%s' "$icon_name" > "$MOCK/remote/displayIcons/${icon_name}.icns"
+    done
+    printf 'tiff-mock-ProDisplayXDR' > "$MOCK/remote/displayIcons/ProDisplayXDR.tiff"
+
+    # curl：把远端 URL 映射到运行时生成的 $MOCK/remote 下
     cat > "$MOCK/bin/curl" <<EOF
 #!/bin/bash
 url=""
@@ -148,7 +192,7 @@ done
 base="\${url%%/Icons.plist}"
 base="\${base%%/displayIcons/*}"
 rel="\${url#*\$base/}"
-src="$FIX/remote/\$rel"
+src="$MOCK/remote/\$rel"
 [ -z "\$dest" ] && exit 0
 if [ -f "\$src" ]; then
     cp "\$src" "\$dest"
@@ -162,6 +206,15 @@ EOF
 }
 
 function setup_target_root() {
+    # 安全防护：测试会清空 $TARGET_DIR。如果你在自己的 Mac 上跑，
+    # 那正好是真实显示器配置所在的位置，会把你实际的配置删掉。
+    if [ -d "$TARGET_DIR" ] && [ -n "$(ls -A "$TARGET_DIR" 2>/dev/null)" ]; then
+        printf '\n\033[31m拒绝运行。\033[0m\n' >&2
+        printf '目录已存在且有内容：%s\n' "$TARGET_DIR" >&2
+        printf '测试套件会清空它。为避免破坏你机器上真实的显示器配置，已中止。\n' >&2
+        printf '确定要跑的话，请先备份并手动删除该目录。\n\n' >&2
+        exit 4
+    fi
     LIB_CREATED=0
     [ -e /Library ] || LIB_CREATED=1
     rm -rf "$TARGET_DIR"
@@ -182,9 +235,11 @@ function teardown_target_root() {
 function test_syntax() {
     printf '\n\033[1m[1] 语法检查\033[0m\n'
     bash -n "$SCRIPT"
-    check "bash -n 通过" "0" "$?"
-    bash -n "$ROOT/tests/gen_fixtures.py" 2>/dev/null
-    check "gen_fixtures.py 非空" "1" "$([ -s "$ROOT/tests/gen_fixtures.py" ] && echo 1 || echo 0)"
+    check "主脚本 bash -n 通过" "0" "$?"
+    bash -n "$HERE/run_tests.sh"
+    check "测试脚本 bash -n 通过" "0" "$?"
+    check "主脚本有正确 shebang" "#!/bin/bash" "$(head -1 "$SCRIPT")"
+    check "测试固件齐全" "4" "$(ls "$FIX"/ioreg_intel_*.txt "$FIX"/ioreg_arm64_2.txt 2>/dev/null | wc -l | tr -d ' ')"
 }
 
 function test_parse_name() {
