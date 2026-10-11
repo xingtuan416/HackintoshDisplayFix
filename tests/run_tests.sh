@@ -18,6 +18,11 @@ TARGET_DIR="/Library/Displays/Contents/Resources/Overrides"
 PASS=0
 FAIL=0
 
+# 用「当前正在跑这个套件的那个 bash」去拉起被测脚本，而不是 PATH 里的 bash。
+# 这样在 macOS 上用 /bin/bash（3.2）启动套件时，被测脚本也跑在 bash 3.2 上，
+# 才真正验证了 bash 3.2 兼容性。
+BASH_BIN="${BASH:-/bin/bash}"
+
 # 语言检测在真实 macOS 上首选 `defaults read -g AppleLocale`，测试里用 mock 控制它，
 # 避免依赖 Linux 上是否装了中文 locale。
 export LANG=C.UTF-8
@@ -239,9 +244,9 @@ function teardown_target_root() {
 
 function test_syntax() {
     printf '\n\033[1m[1] 语法检查\033[0m\n'
-    bash -n "$SCRIPT"
+    "$BASH_BIN" -n "$SCRIPT"
     check "主脚本 bash -n 通过" "0" "$?"
-    bash -n "$HERE/run_tests.sh"
+    "$BASH_BIN" -n "$HERE/run_tests.sh"
     check "测试脚本 bash -n 通过" "0" "$?"
     check "主脚本有正确 shebang" "#!/bin/bash" "$(head -1 "$SCRIPT")"
     check "测试固件齐全" "4" "$(ls "$FIX"/ioreg_intel_*.txt "$FIX"/ioreg_arm64_2.txt 2>/dev/null | wc -l | tr -d ' ')"
@@ -272,7 +277,7 @@ function test_edid_transform() {
 function test_detect_intel() {
     printf '\n\033[1m[4] Intel 显示器检测\033[0m\n'
     local out
-    out=$( HDF_IOREG="$FIX/ioreg_intel_2.txt" bash -c '
+    out=$( HDF_IOREG="$FIX/ioreg_intel_2.txt" "$BASH_BIN" -c '
         source "'"$SCRIPT"'"
         detect_displays_intel
         printf "%s|%s|%s|%s|%s|%s|%s\n" "$DISP_COUNT" \
@@ -284,7 +289,7 @@ function test_detect_intel() {
 function test_detect_arm() {
     printf '\n\033[1m[5] Apple Silicon 显示器检测\033[0m\n'
     local out
-    out=$( HDF_ARCH=arm64 HDF_IOREG="$FIX/ioreg_arm64_2.txt" bash -c '
+    out=$( HDF_ARCH=arm64 HDF_IOREG="$FIX/ioreg_arm64_2.txt" "$BASH_BIN" -c '
         source "'"$SCRIPT"'"
         detect_displays_arm
         printf "%s|%s|%s|%s|%s|%s\n" "$DISP_COUNT" \
@@ -297,7 +302,7 @@ function test_dedupe() {
     printf '\n\033[1m[6] 重复显示器去重\033[0m\n'
     cat "$FIX/ioreg_intel_2.txt" "$FIX/ioreg_intel_1.txt" > "$FIX/.dup.tmp"
     local out
-    out=$( HDF_IOREG="$FIX/.dup.tmp" bash -c '
+    out=$( HDF_IOREG="$FIX/.dup.tmp" "$BASH_BIN" -c '
         source "'"$SCRIPT"'"
         detect_displays_intel
         printf "%s" "$DISP_COUNT"' )
@@ -308,7 +313,7 @@ function test_dedupe() {
 function test_list_cli() {
     printf '\n\033[1m[7] --list 非交互模式\033[0m\n'
     local out rc
-    out=$( HDF_IOREG="$FIX/ioreg_intel_2.txt" bash "$SCRIPT" --list 2>&1 )
+    out=$( HDF_IOREG="$FIX/ioreg_intel_2.txt" "$BASH_BIN" "$SCRIPT" --list 2>&1 )
     rc=$?
     check_exit "--list 退出码 0" "0" "$rc"
     check_contains "列出 DELL" "10ac:4183" "$out"
@@ -320,7 +325,7 @@ function test_list_cli() {
 function test_no_display() {
     printf '\n\033[1m[8] 无显示器\033[0m\n'
     local out rc
-    out=$( HDF_IOREG="$FIX/ioreg_intel_0.txt" bash "$SCRIPT" 2>&1 </dev/null )
+    out=$( HDF_IOREG="$FIX/ioreg_intel_0.txt" "$BASH_BIN" "$SCRIPT" 2>&1 </dev/null )
     rc=$?
     check_exit "退出码 2" "2" "$rc"
     check_contains "提示未找到显示器" "没有检测到任何显示器" "$out"
@@ -329,7 +334,7 @@ function test_no_display() {
 function test_full_inject() {
     printf '\n\033[1m[9] 完整注入流程（保持原样图标）\033[0m\n'
     local out rc plist
-    out=$( printf '1\n1\n6\ny\n' | HDF_IOREG="$FIX/ioreg_intel_2.txt" bash "$SCRIPT" 2>&1 )
+    out=$( printf '1\n1\n6\ny\n' | HDF_IOREG="$FIX/ioreg_intel_2.txt" "$BASH_BIN" "$SCRIPT" 2>&1 )
     rc=$?
     check_exit "退出码 0" "0" "$rc"
     plist="$TARGET_DIR/DisplayVendorID-10ac/DisplayProductID-4183"
@@ -350,7 +355,7 @@ function test_restore_script() {
     local rs="$HOME/.hackintoshdisplayfix-restore.sh"
     check "还原脚本已生成" "yes" "$([ -f "$rs" ] && echo yes || echo no)"
     if [ -f "$rs" ]; then
-        bash -n "$rs"
+        "$BASH_BIN" -n "$rs"
         check "还原脚本语法通过" "0" "$?"
         check_contains "还原脚本含 VID" "VID='10ac'" "$(cat "$rs")"
         check_contains "还原脚本含 PID" "PID='4183'" "$(cat "$rs")"
@@ -361,7 +366,7 @@ function test_restore_script() {
 function test_invalid_input_retry() {
     printf '\n\033[1m[11] 非法输入不退出，可重试\033[0m\n'
     local out rc
-    out=$( printf '9\nabc\n1\n1\n6\ny\n' | HDF_IOREG="$FIX/ioreg_intel_2.txt" bash "$SCRIPT" 2>&1 )
+    out=$( printf '9\nabc\n1\n1\n6\ny\n' | HDF_IOREG="$FIX/ioreg_intel_2.txt" "$BASH_BIN" "$SCRIPT" 2>&1 )
     rc=$?
     check_exit "乱输入后仍能跑完" "0" "$rc"
     check_contains "提示输入无效" "输入无效" "$out"
@@ -373,7 +378,7 @@ function test_cancel() {
     local out rc
     rm -rf "$TARGET_DIR"
     mkdir -p "$TARGET_DIR"
-    out=$( printf 'q\n' | HDF_IOREG="$FIX/ioreg_intel_2.txt" bash "$SCRIPT" 2>&1 )
+    out=$( printf 'q\n' | HDF_IOREG="$FIX/ioreg_intel_2.txt" "$BASH_BIN" "$SCRIPT" 2>&1 )
     rc=$?
     check_exit "取消后退出码 0" "0" "$rc"
     check "没有写入任何配置" "no" "$([ -d "$TARGET_DIR/DisplayVendorID-10ac" ] && echo yes || echo no)"
@@ -383,10 +388,10 @@ function test_restore_one() {
     printf '\n\033[1m[13] 还原：只移除本显示器\033[0m\n'
     local out rc
     # 先注入
-    printf '1\n1\n6\ny\n' | HDF_IOREG="$FIX/ioreg_intel_2.txt" bash "$SCRIPT" >/dev/null 2>&1
+    printf '1\n1\n6\ny\n' | HDF_IOREG="$FIX/ioreg_intel_2.txt" "$BASH_BIN" "$SCRIPT" >/dev/null 2>&1
     check "注入后配置存在" "yes" "$([ -f "$TARGET_DIR/DisplayVendorID-10ac/DisplayProductID-4183" ] && echo yes || echo no)"
     # 再还原
-    out=$( printf '1\n2\n1\ny\n' | HDF_IOREG="$FIX/ioreg_intel_2.txt" bash "$SCRIPT" 2>&1 )
+    out=$( printf '1\n2\n1\ny\n' | HDF_IOREG="$FIX/ioreg_intel_2.txt" "$BASH_BIN" "$SCRIPT" 2>&1 )
     rc=$?
     check_exit "还原退出码 0" "0" "$rc"
     check "该显示器配置已移除" "no" "$([ -d "$TARGET_DIR/DisplayVendorID-10ac" ] && echo yes || echo no)"
@@ -396,8 +401,8 @@ function test_restore_one() {
 function test_restore_all() {
     printf '\n\033[1m[14] 还原：移除全部\033[0m\n'
     local rc
-    printf '1\n1\n6\ny\n' | HDF_IOREG="$FIX/ioreg_intel_2.txt" bash "$SCRIPT" >/dev/null 2>&1
-    printf '1\n2\n2\ny\n' | HDF_IOREG="$FIX/ioreg_intel_2.txt" bash "$SCRIPT" >/dev/null 2>&1
+    printf '1\n1\n6\ny\n' | HDF_IOREG="$FIX/ioreg_intel_2.txt" "$BASH_BIN" "$SCRIPT" >/dev/null 2>&1
+    printf '1\n2\n2\ny\n' | HDF_IOREG="$FIX/ioreg_intel_2.txt" "$BASH_BIN" "$SCRIPT" >/dev/null 2>&1
     rc=$?
     check_exit "还原全部退出码 0" "0" "$rc"
     check "Overrides 目录已删除" "no" "$([ -d "$TARGET_DIR" ] && echo yes || echo no)"
@@ -406,27 +411,27 @@ function test_restore_all() {
 function test_language() {
     printf '\n\033[1m[15] 语言切换\033[0m\n'
     local out
-    out=$( HDF_APPLELOCALE=zh_CN HDF_IOREG="$FIX/ioreg_intel_2.txt" bash "$SCRIPT" --list 2>&1 )
+    out=$( HDF_APPLELOCALE=zh_CN HDF_IOREG="$FIX/ioreg_intel_2.txt" "$BASH_BIN" "$SCRIPT" --list 2>&1 )
     check_contains "中文界面" "检测到 2 台显示器" "$out"
 
-    out=$( HDF_APPLELOCALE=en_US HDF_IOREG="$FIX/ioreg_intel_2.txt" bash "$SCRIPT" --list 2>&1 )
+    out=$( HDF_APPLELOCALE=en_US HDF_IOREG="$FIX/ioreg_intel_2.txt" "$BASH_BIN" "$SCRIPT" --list 2>&1 )
     check_contains "英文界面" "2 display(s) detected" "$out"
 
-    out=$( HDF_APPLELOCALE=uk_UA HDF_IOREG="$FIX/ioreg_intel_2.txt" bash "$SCRIPT" --list 2>&1 )
+    out=$( HDF_APPLELOCALE=uk_UA HDF_IOREG="$FIX/ioreg_intel_2.txt" "$BASH_BIN" "$SCRIPT" --list 2>&1 )
     check_contains "乌克兰语界面" "Знайдено дисплеїв" "$out"
 
-    out=$( HDF_APPLELOCALE=zh_Hans_CN HDF_IOREG="$FIX/ioreg_intel_2.txt" bash "$SCRIPT" --list 2>&1 )
+    out=$( HDF_APPLELOCALE=zh_Hans_CN HDF_IOREG="$FIX/ioreg_intel_2.txt" "$BASH_BIN" "$SCRIPT" --list 2>&1 )
     check_contains "zh_Hans 也识别为中文" "检测到 2 台显示器" "$out"
 
     # AppleLocale 取不到时回退到 LANG
-    out=$( HDF_APPLELOCALE= LANG=en_US.UTF-8 HDF_IOREG="$FIX/ioreg_intel_2.txt" bash "$SCRIPT" --list 2>&1 )
+    out=$( HDF_APPLELOCALE= LANG=en_US.UTF-8 HDF_IOREG="$FIX/ioreg_intel_2.txt" "$BASH_BIN" "$SCRIPT" --list 2>&1 )
     check_contains "无 AppleLocale 时回退 LANG" "display(s) detected" "$out"
 }
 
 function test_single_display() {
     printf '\n\033[1m[16] 单显示器也显示列表\033[0m\n'
     local out
-    out=$( printf 'q\n' | HDF_IOREG="$FIX/ioreg_intel_1.txt" bash "$SCRIPT" 2>&1 )
+    out=$( printf 'q\n' | HDF_IOREG="$FIX/ioreg_intel_1.txt" "$BASH_BIN" "$SCRIPT" 2>&1 )
     check_contains "单台也列出显示器" "10ac:4183" "$out"
     check_contains "单台也列出名称" "DELL U2720Q" "$out"
 }
@@ -435,7 +440,7 @@ function test_icon_flow() {
     printf '\n\033[1m[17] 图标流程（iMac）\033[0m\n'
     local rc
     rm -rf "$TARGET_DIR"; mkdir -p "$TARGET_DIR"
-    printf '1\n1\n1\ny\n' | HDF_IOREG="$FIX/ioreg_intel_2.txt" bash "$SCRIPT" >/dev/null 2>&1
+    printf '1\n1\n1\ny\n' | HDF_IOREG="$FIX/ioreg_intel_2.txt" "$BASH_BIN" "$SCRIPT" >/dev/null 2>&1
     rc=$?
     check_exit "带图标注入退出码 0" "0" "$rc"
     check "icns 已写入" "yes" "$([ -f "$TARGET_DIR/DisplayVendorID-10ac/DisplayProductID-4183.icns" ] && echo yes || echo no)"
@@ -454,9 +459,9 @@ function test_icon_flow() {
 function test_help_version() {
     printf '\n\033[1m[18] --help / --version\033[0m\n'
     local out rc
-    out=$( bash "$SCRIPT" --version 2>&1 )
+    out=$( "$BASH_BIN" "$SCRIPT" --version 2>&1 )
     check "版本号" "HackintoshDisplayFix 1.0.0" "$out"
-    out=$( bash "$SCRIPT" --help 2>&1 )
+    out=$( "$BASH_BIN" "$SCRIPT" --help 2>&1 )
     rc=$?
     check_exit "--help 退出码 0" "0" "$rc"
     check_contains "--help 含用法" "用法" "$out"

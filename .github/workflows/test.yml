@@ -20,7 +20,17 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: 运行测试套件
-        run: sudo bash tests/run_tests.sh
+        run: |
+          if [ "$(uname -s)" = "Darwin" ]; then
+            # macOS 自带的是 bash 3.2，故意用它启动，验证脚本在 3.2 上也能跑。
+            # runner 的 PATH 里 Homebrew 在前，裸 `bash` 会是 bash 5，所以必须写死路径。
+            BASH_BIN=/bin/bash
+          else
+            BASH_BIN="$(command -v bash)"
+          fi
+          echo "被测 bash: $BASH_BIN"
+          "$BASH_BIN" --version | head -1
+          sudo "$BASH_BIN" tests/run_tests.sh
 
   bash32-compat:
     name: bash 3.2 兼容性扫描
