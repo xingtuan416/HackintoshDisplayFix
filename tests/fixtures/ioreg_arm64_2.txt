@@ -1,0 +1,2 @@
+    | |   |   |   |   |   |   |     "DisplayAttributes" = {"LegacyManufacturerID"=4268,"ProductID"=16771,"ProductName"="DELL U2720Q","SerialNumber"=1,"DisplayProductName"="DELL U2720Q"}
+    | |   |   |   |   |   |   |     "DisplayAttributes" = {"LegacyManufacturerID"=7789,"ProductID"=23313,"ProductName"="LG HDR 4K","SerialNumber"=2,"DisplayProductName"="LG HDR 4K"}

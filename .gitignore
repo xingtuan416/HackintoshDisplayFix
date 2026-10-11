@@ -1,0 +1,11 @@
+# 测试运行时生成的 mock 环境
+tests/.mock/
+
+# macOS
+.DS_Store
+._*
+
+# 编辑器
+.vscode/
+.idea/
+*.swp

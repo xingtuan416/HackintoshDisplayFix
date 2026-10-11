@@ -1,0 +1,11 @@
+# 统一换行符：shell 脚本必须是 LF，否则 macOS 上会报
+# `bash: /path/xxx.sh: /bin/bash^M: bad interpreter`
+* text=auto eol=lf
+
+*.sh   text eol=lf
+*.py   text eol=lf
+*.md   text eol=lf
+*.plist text eol=lf
+
+*.icns binary
+*.tiff binary
