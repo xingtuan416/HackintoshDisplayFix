@@ -132,9 +132,12 @@ fi
 exit 1
 EOF
 
-    # 提权脚本里会 chown root:wheel，Linux 上没有 wheel 组，这里映射成 root:root
-    REAL_CHOWN=$(command -v chown)
-    cat > "$MOCK/bin/chown" <<EOF
+    # 提权脚本里会 `chown root:wheel`。
+    # Linux 上没有 wheel 组，要映射成 root:root；macOS 上 root:wheel 本来就是对的
+    # （macOS 没有名为 root 的组），所以 macOS 上不要 mock，直接用真命令。
+    if [ "$(uname -s)" != "Darwin" ]; then
+        REAL_CHOWN=$(command -v chown)
+        cat > "$MOCK/bin/chown" <<EOF
 #!/bin/bash
 args=()
 for a in "\$@"; do
@@ -142,6 +145,7 @@ for a in "\$@"; do
 done
 exec $REAL_CHOWN "\${args[@]}"
 EOF
+    fi
 
     # 图标资源：运行时生成，不往仓库里塞假二进制
     mkdir -p "$MOCK/remote/displayIcons"
