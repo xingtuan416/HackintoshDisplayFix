@@ -51,7 +51,8 @@ function check_contains() {
         *)
             printf '  \033[31mFAIL\033[0m  %s\n' "$desc"
             printf '          未在输出中找到: %s\n' "$needle"
-            printf '          实际输出: %s\n' "$(printf '%s' "$hay" | head -c 400)"
+            printf '          实际输出:\n'
+            printf '%s\n' "$hay" | sed 's/^/          | /'
             FAIL=$((FAIL + 1)) ;;
     esac
 }
