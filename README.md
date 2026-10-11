@@ -227,15 +227,26 @@ sudo bash tests/run_tests.sh
 工具本身只能在 macOS 上运行，测试套件用 mock 顶替 `ioreg` / `sudo` / `uname` / `curl` 等 macOS 专有命令，
 验证**解析逻辑、交互流程、文件产物**是否正确（含 EDID 改造算法的逐字节比对）。
 
-- **在 Linux 上跑**：`sed` 也会被 mock 掉（GNU sed 不支持 BSD 的 `-i ''` 写法）
-- **在 macOS 上跑**：`sed` / `xxd` / `base64` 都是真的，顺带验证 BSD 用法和 **bash 3.2 兼容性**
+- **在 Linux 上跑**：`sed` 会被 mock 掉（GNU sed 不支持 BSD 的 `-i ''` 写法）
+- **在 macOS 上跑**：`sed` / `xxd` / `base64` 全部用真命令，验证的是真实的 BSD 行为
+
+CI 实测结果：
+
+| 平台 | bash 版本 | 结果 |
+|---|---|---|
+| macOS (arm64) | **3.2.57**（系统自带） | **59 / 59 通过** |
+| Ubuntu | 5.2.21 | 59 / 59 通过 |
+
+macOS 那一栏是**故意用 `/bin/bash` 启动**的 —— runner 的 PATH 里 Homebrew 在前，裸 `bash` 会拿到 bash 5。
+这样才能确认脚本在 macOS 自带的 bash 3.2 上确实跑得起来，而那正是唯一真正重要的运行环境。
+
+CI 还会额外扫描 bash 4+ 专有写法（关联数组、`${var,,}`、`mapfile` 等），防止以后不小心写进去。
 
 > ⚠️ **不要在自己的 Mac 上随手跑测试。** 它会清空 `/Library/Displays/Contents/Resources/Overrides`，
 > 而那正是你真实显示器配置所在的位置。测试套件启动时会先检查该目录，**一旦发现里面有内容就直接拒绝运行**，
 > 但更稳妥的做法还是用 CI 或干净的虚拟机。
 
-CI（[.github/workflows/test.yml](.github/workflows/test.yml)）会在 ubuntu 和 macOS 上各跑一遍，
-并额外扫描 bash 4+ 专有写法 —— macOS 自带的 bash 3.2 不支持那些语法。
+详见 [.github/workflows/test.yml](.github/workflows/test.yml)。
 
 ---
 
